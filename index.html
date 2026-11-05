@@ -93,36 +93,39 @@
         <label class="full">Titlu (opțional)
           <input name="titlu" placeholder="ex. Allianz, Enel curent, amendă viteză">
         </label>
-        <label>Scadență / expiră la
+      </div>
+
+      <h3>Stare <span class="req">*</span></h3>
+      <div class="seg" id="stareSeg" role="radiogroup" aria-label="Stare">
+        <label><input type="radio" name="stare" value="platita"><span>✓ Plătită</span></label>
+        <label><input type="radio" name="stare" value="deplatit"><span>⏳ De plătit</span></label>
+      </div>
+
+      <div class="grid" id="dateBlock" hidden>
+        <p class="full paid-on" data-mode="platita" id="paidOnLine">Plătită azi, <b id="paidOnText"></b> · <button type="button" class="linkbtn" id="btnOtherDate">am plătit altă dată?</button></p>
+        <label data-mode="platita" id="valabilDeWrap" hidden>Plătită la (valabilă de la)
+          <input name="valabilDe" type="date">
+        </label>
+        <label>
+          <span id="recLabel">Valabilitate</span>
+          <select name="recurenta"></select>
+        </label>
+        <label>
+          <span id="expLabel">Expiră la</span>
           <input name="expira" type="date" required>
         </label>
-        <label>Ultima sumă plătită (lei)
+        <label>
+          <span id="sumaLabel">Sumă plătită (lei)</span>
           <input name="suma" type="number" step="0.01" min="0" inputmode="decimal" placeholder="opțional">
         </label>
+        <p class="muted small full calc" id="calcHint"></p>
         <div id="amendaHelp" class="hint full" hidden>
           Plata în 15 zile de la comunicarea procesului-verbal se face cu jumătate din minimul amenzii (OG 2/2001, art. 28).
           <span class="inline">Comunicat la <input type="date" id="dataComunicare"> <button type="button" class="btn small" id="btnCalc15">+15 zile</button></span>
         </div>
-        <label>Valabilitate / se repetă
-          <select name="recurenta"></select>
-        </label>
         <label class="full">Note
           <textarea name="note" rows="2" placeholder="nr. poliță, cod client, link plată…"></textarea>
         </label>
-      </div>
-      <div id="paidBlock" class="paid-block">
-        <h3>Ai plătit-o deja? <span class="req">*</span></h3>
-        <div class="seg" id="paidSeg" role="radiogroup">
-          <label><input type="radio" name="platit" value="azi"><span>✓ Da, azi</span></label>
-          <label><input type="radio" name="platit" value="alta"><span>Da, altă dată</span></label>
-          <label><input type="radio" name="platit" value="nu"><span>Nu încă</span></label>
-        </div>
-        <div class="grid" id="paidDateWrap" hidden>
-          <label>Data plății
-            <input type="date" id="dataPlata">
-          </label>
-        </div>
-        <p class="muted small" id="paidHint"></p>
       </div>
       <footer class="sheet-foot">
         <button type="button" class="btn danger ghost" id="btnDelete" hidden>Șterge</button>

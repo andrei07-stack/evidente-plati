@@ -284,7 +284,7 @@
         <div class="sub">${subLine(it)}</div>
         <div class="meta"><span class="badge ${st.cls}">${st.text}</span><span class="date">${roDate(it.expira)}</span>${syncFlag(it)}</div>
       </div>
-      <div class="side">${it.suma ? `<span class="sum" title="Ultima sumă plătită"><small>ultima</small> ${lei(Number(it.suma))}</span>` : ''}${paidBtn(it)}</div>
+      <div class="side">${it.suma ? `<span class="sum"><small>${it.neplatit ? 'de plată' : 'ultima'}</small> ${lei(Number(it.suma))}</span>` : ''}${paidBtn(it)}</div>
     </article>`;
   }
 
@@ -341,7 +341,7 @@
     const pct = Math.max(4, Math.min(100, 100 - (d / 365) * 100));
     return `<button type="button" class="wrow ${st.cls}" data-open="${i.id}">
       <span class="wi">${catOf(i.categorie).ico}</span>
-      <span class="wl"><b>${esc(titleOf(i))}</b><small>${roDate(i.expira)}${i.suma ? ' · ultima ' + lei(Number(i.suma)) : ''}</small></span>
+      <span class="wl"><b>${esc(titleOf(i))}</b><small>${roDate(i.expira)}${i.suma ? (i.neplatit ? ' · de plată ' : ' · ultima ') + lei(Number(i.suma)) : ''}</small></span>
       <span class="badge ${st.cls}">${st.text}</span>
     </button><div class="wbar ${st.cls}" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
   }
@@ -365,7 +365,7 @@
             <div class="tline"></div>
             <div class="tbody">
               <div><div class="t">${catOf(i.categorie).ico} ${esc(titleOf(i))}</div><div class="sub">${subLine(i)} <span class="badge ${st.cls}">${st.text}</span>${syncFlag(i)}</div></div>
-              <div class="side">${i.suma ? `<span class="sum" title="Ultima sumă plătită"><small>ultima</small> ${lei(Number(i.suma))}</span>` : ''}${paidBtn(i)}</div>
+              <div class="side">${i.suma ? `<span class="sum"><small>${i.neplatit ? 'de plată' : 'ultima'}</small> ${lei(Number(i.suma))}</span>` : ''}${paidBtn(i)}</div>
             </div></div>`;
         }).join('')}`;
     }).join('')}</div>`;
@@ -477,93 +477,147 @@
     form.assetId.value = selected || '';
   }
 
+  // Formularul are două stări:
+  //  • Plătită: data plății + valabilitate → „Expiră la” se calculează automat (poate fi corectat).
+  //  • De plătit: termen de plată (+ eventual „se repetă”).
+  const subPeriod = (iso, code) => { const c = String(code); return c.endsWith('d') ? addDays(iso, -parseInt(c, 10)) : addMonths(iso, -Number(c)); };
+  const stareOf = () => form.querySelector('input[name=stare]:checked')?.value || '';
+  let manualExp = false;
+  let showOtherDate = false;
+  $('#btnOtherDate').addEventListener('click', () => { showOtherDate = true; updateForm(); form.valabilDe.focus(); });
+
+  function guessStare(it) {
+    if (it.neplatit === true) return 'deplatit';
+    if (it.neplatit === false) return 'platita';
+    return (it.istoric && it.istoric.length) || isRecurring(it) ? 'platita' : 'deplatit';
+  }
+
   function openForm(it, preset = {}) {
     form.reset();
+    showOtherDate = false;
     $('#dlgTitle').textContent = it ? 'Editează evidența' : 'Evidență nouă';
     $('#btnDelete').hidden = !it;
-    $('#paidBlock').hidden = !!it; // la editare, plățile se confirmă cu „✓ Plătit”
-    $('#paidDateWrap').hidden = true;
-    $('#paidHint').textContent = '';
-    manualExp = false;
     const d = it || Object.assign({ categorie: 'RCA', recurenta: 12 }, preset);
     if (!it && preset.categorie) d.recurenta = catOf(preset.categorie).rec;
     fillAssetSelect(d.assetId);
     form.id.value = d.id || '';
     form.categorie.value = d.categorie;
     form.titlu.value = d.titlu || '';
-    form.expira.value = d.expira || '';
     form.suma.value = d.suma ?? '';
     form.recurenta.value = PER_LABEL[String(d.recurenta ?? 0)] ? String(d.recurenta ?? 0) : '0';
     form.note.value = d.note || '';
-    $('#amendaHelp').hidden = form.categorie.value !== 'Amendă';
+    form.expira.value = d.expira || '';
+    if (it) {
+      const st = guessStare(it);
+      form.querySelector(`input[name=stare][value=${st}]`).checked = true;
+      const rec = form.recurenta.value;
+      form.valabilDe.value = it.valabilDe || (rec !== '0' && it.expira ? subPeriod(it.expira, rec) : it.ultimaPlata || '');
+      // păstrează expirarea existentă; dacă diferă de calcul, o tratăm ca introdusă de mână
+      manualExp = !!(form.valabilDe.value && rec !== '0' && addPeriod(form.valabilDe.value, rec) !== it.expira);
+    } else {
+      manualExp = false;
+      form.valabilDe.value = todayIso();
+    }
+    updateForm();
     dlg.showModal();
     // focus inițial doar dacă utilizatorul n-a început deja să completeze alt câmp
-    if (!it) setTimeout(() => { const ae = document.activeElement; if (!ae || ae === dlg || !dlg.contains(ae)) (preset.categorie ? form.expira : form.categorie).focus(); }, 50);
+    if (!it) setTimeout(() => { const ae = document.activeElement; if (!ae || ae === dlg || !dlg.contains(ae)) form.categorie.focus(); }, 50);
   }
 
+  function updateForm() {
+    const st = stareOf();
+    const platita = st === 'platita';
+    $('#dateBlock').hidden = !st;
+    form.querySelectorAll('[data-mode=platita]').forEach((el) => { el.hidden = !platita; });
+    // data plății: implicit ziua adăugării; câmpul apare doar la „am plătit altă dată?” sau dacă data nu e azi
+    const showDate = platita && (showOtherDate || (form.valabilDe.value && form.valabilDe.value !== todayIso()));
+    if (showDate) showOtherDate = true; // odată afișat, rămâne vizibil cât timp e deschis formularul
+    $('#valabilDeWrap').hidden = !showDate;
+    $('#paidOnLine').hidden = !platita || showDate;
+    $('#paidOnText').textContent = roDate(todayIso());
+    $('#recLabel').textContent = platita ? 'Valabilitate (pe cât timp ai plătit)' : 'Se repetă';
+    $('#expLabel').textContent = platita ? 'Expiră la' : 'Termen de plată';
+    $('#sumaLabel').textContent = platita ? 'Sumă plătită (lei)' : 'Sumă de plată (lei)';
+    $('#amendaHelp').hidden = platita || form.categorie.value !== 'Amendă';
+    form.recurenta.querySelector('option[value="0"]').textContent = platita ? 'O singură dată (fără expirare)' : 'Nu se repetă';
+    const rec = form.recurenta.value;
+    let hint = '';
+    if (platita) {
+      const base = form.valabilDe.value;
+      if (rec === '0') {
+        hint = 'Plătită o singură dată: se închide (nu mai apare în calendar) și intră în totalul „Plătit”.';
+        $('#expLabel').closest('label').hidden = true;
+      } else {
+        $('#expLabel').closest('label').hidden = false;
+        if (!base) hint = 'Completează data plății ca să calculez expirarea.';
+        else {
+          const calc = addPeriod(base, rec);
+          if (!manualExp) form.expira.value = calc;
+          hint = form.expira.value === calc
+            ? `Calculat automat: ${roDate(base)} + ${PER_LABEL[rec]} = ${roDate(calc)}.`
+            : `Ai corectat expirarea de mână (${roDate(form.expira.value)}). Calculat ar fi ${roDate(calc)}.`;
+        }
+      }
+    } else {
+      $('#expLabel').closest('label').hidden = false;
+      if (st) hint = 'Termenul până la care trebuie plătită. După plată apeși „✓ Plătit” pe card.';
+    }
+    $('#calcHint').textContent = hint;
+  }
+
+  $('#stareSeg').addEventListener('change', () => {
+    if (stareOf() === 'platita' && !form.valabilDe.value) form.valabilDe.value = todayIso();
+    manualExp = false;
+    updateForm();
+  });
+  form.valabilDe.addEventListener('change', () => { manualExp = false; updateForm(); });
+  form.recurenta.addEventListener('change', () => { manualExp = false; updateForm(); });
+  form.expira.addEventListener('change', () => { manualExp = true; updateForm(); });
   form.categorie.addEventListener('change', () => {
     const c = catOf(form.categorie.value);
-    if (!form.id.value) form.recurenta.value = String(c.rec);
-    $('#amendaHelp').hidden = c.id !== 'Amendă';
-    updatePaidBlock();
+    if (!form.id.value) { form.recurenta.value = String(c.rec); manualExp = false; }
+    updateForm();
   });
   $('#btnCalc15').addEventListener('click', () => {
     const v = $('#dataComunicare').value;
-    if (v) form.expira.value = addDays(v, 15);
+    if (v) { form.expira.value = addDays(v, 15); manualExp = true; updateForm(); }
   });
-
-  // La adăugare: dacă e deja plătită și are perioadă, expirarea = data plății + perioada (dacă n-ai scris-o tu de mână).
-  let manualExp = false;
-  form.expira.addEventListener('change', () => { manualExp = true; updatePaidBlock(); });
-  function updatePaidBlock() {
-    if (form.id.value) return;
-    const v = form.querySelector('input[name=platit]:checked')?.value;
-    $('#paidDateWrap').hidden = v !== 'alta';
-    const rec = form.recurenta.value;
-    const base = v === 'azi' ? todayIso() : v === 'alta' ? $('#dataPlata').value : '';
-    let hint = '';
-    if (v === 'nu') hint = 'La „Scadență / expiră la” pune termenul până la care trebuie plătită.';
-    else if (v && rec === '0') hint = 'Plata intră în totalul „Plătit”. Alege la „Valabilitate” pe ce perioadă ai plătit, ca să calculez expirarea.';
-    else if (v && !base) hint = 'Alege data plății.';
-    else if (v) {
-      const calc = addPeriod(base, rec);
-      if (!manualExp) form.expira.value = calc;
-      hint = form.expira.value === calc
-        ? `Expiră automat la ${roDate(calc)} (data plății + ${PER_LABEL[rec]}). Poți corecta data mai sus.`
-        : `Ai pus expirarea de mână (${roDate(form.expira.value)}). Calculat ar fi ${roDate(calc)}.`;
-    }
-    $('#paidHint').textContent = hint;
-  }
-  $('#paidSeg').addEventListener('change', updatePaidBlock);
-  $('#dataPlata').addEventListener('change', updatePaidBlock);
-  form.recurenta.addEventListener('change', updatePaidBlock);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!form.expira.value) { form.expira.focus(); return toast('Alege data scadenței.'); }
+    const st = stareOf();
+    if (!st) { $('#stareSeg').scrollIntoView({ block: 'center' }); return toast('Alege dacă e plătită sau de plătit.'); }
+    const platita = st === 'platita';
+    const rec = form.recurenta.value;
+    const once = platita && rec === '0';
+    if (platita && !form.valabilDe.value) { form.valabilDe.focus(); return toast('Completează data plății.'); }
+    if (!once && !form.expira.value) { form.expira.focus(); return toast(platita ? 'Completează data expirării.' : 'Completează termenul de plată.'); }
     const id = form.id.value;
     const prev = id ? state.items.find((i) => i.id === id) : null;
-    const platit = prev ? null : form.querySelector('input[name=platit]:checked')?.value;
-    if (!prev && !platit) { $('#paidSeg').scrollIntoView({ block: 'center' }); return toast('Alege dacă ai plătit-o deja.'); }
-    if (platit === 'alta' && !$('#dataPlata').value) { $('#dataPlata').focus(); return toast('Alege data plății.'); }
+    const wasPaid = prev ? guessStare(prev) === 'platita' : false;
+    const suma = form.suma.value === '' ? null : Number(form.suma.value);
     const it = Object.assign(prev || { id: uid(), status: 'activ', istoric: [], eventId: null }, {
       categorie: form.categorie.value,
       titlu: form.titlu.value.trim(),
       assetId: form.assetId.value || null,
-      expira: form.expira.value,
-      suma: form.suma.value === '' ? null : Number(form.suma.value),
-      recurenta: form.recurenta.value,
+      expira: once ? form.valabilDe.value : form.expira.value,
+      suma,
+      recurenta: rec,
       note: form.note.value.trim(),
+      neplatit: !platita,
+      valabilDe: platita ? form.valabilDe.value : null,
+      status: once ? 'platit' : 'activ',
       dirty: true,
     });
-    if (!prev) {
-      if (platit === 'azi' || platit === 'alta') {
-        const data = platit === 'azi' ? todayIso() : $('#dataPlata').value;
-        it.istoric.push({ data, scadenta: null, suma: it.suma, perioada: it.recurenta });
-        it.ultimaPlata = data;
-      }
-      state.items.push(it);
+    it.istoric = it.istoric || [];
+    if (platita) {
+      const pay = { data: form.valabilDe.value, scadenta: null, suma, perioada: rec };
+      // la editarea unei evidențe deja plătite corectăm ultima plată; altfel înregistrăm o plată nouă
+      if (wasPaid && it.istoric.length) Object.assign(it.istoric[it.istoric.length - 1], { data: pay.data, suma: pay.suma, perioada: rec });
+      else it.istoric.push(pay);
+      it.ultimaPlata = pay.data;
     }
+    if (!prev) state.items.push(it);
     dlg.close();
     commit();
     toast(prev ? 'Salvat.' : 'Adăugat.');
@@ -629,11 +683,14 @@
     if (paid !== null) it.suma = paid;
     if (per === '0') {
       it.status = 'platit';
+      it.neplatit = false;
       toast('Marcat ca plătit.', { label: 'Anulează', fn: () => restore(snapshot) });
     } else {
       it.recurenta = per;
       it.expira = formPay.next.value;
       it.status = 'activ';
+      it.valabilDe = formPay.start.value;
+      it.neplatit = false;
       toast(`Valabil până la ${roDate(it.expira)}`, { label: 'Anulează', fn: () => restore(snapshot) });
     }
     it.dirty = true;
@@ -1051,6 +1108,28 @@
     return out;
   }
 
+  // Șterge evenimentele create de aplicație care nu mai corespund niciunei evidențe active
+  // (ex. rămase de la versiuni vechi). Atinge doar evenimentele marcate cu evidenteId și mai vechi de 10 minute,
+  // ca să nu șteargă un eveniment creat chiar acum de celălalt dispozitiv. Rulează cel mult o dată la 30 de minute.
+  let lastCleanup = 0;
+  async function cleanupOrphans(calId) {
+    if (Date.now() - lastCleanup < 30 * 60 * 1000) return;
+    lastCleanup = Date.now();
+    const keep = new Set(state.items.filter((i) => i.status !== 'platit' && i.eventId).map((i) => i.eventId));
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    const base = `${CAL}/calendars/${encodeURIComponent(calId)}/events`;
+    let pageToken = '';
+    do {
+      const r = await api(`${base}?maxResults=2500&showDeleted=false${pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''}`);
+      for (const ev of r.items || []) {
+        if (keep.has(ev.id) || !ev.extendedProperties?.private?.evidenteId) continue;
+        if (new Date(ev.updated || ev.created || 0).getTime() > cutoff) continue;
+        try { await api(`${base}/${ev.id}`, { method: 'DELETE' }); } catch (e) { if (![404, 410].includes(e.status)) throw e; }
+      }
+      pageToken = r.nextPageToken || '';
+    } while (pageToken);
+  }
+
   let syncAgain = false;
   async function syncNow() {
     if (DEMO) return;
@@ -1084,6 +1163,7 @@
       }
       saveLocal();
       await driveWrite(state);
+      await cleanupOrphans(calId).catch((e) => console.warn('curățenie calendar', e));
       render();
       setSync('on');
     } catch (e) {

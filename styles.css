@@ -400,3 +400,7 @@ dialog::backdrop { background: rgba(10, 15, 20, .45); }
   border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent); background: var(--primary-soft); color: var(--text); font-size: 14px;
 }
 .sync-banner:hover { background: color-mix(in srgb, var(--primary) 22%, transparent); }
+
+.paid-on { margin: 0; font-size: 13.5px; color: var(--muted); }
+.paid-on b { color: var(--text); }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--primary); font-weight: 600; cursor: pointer; text-decoration: underline; }

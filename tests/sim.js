@@ -49,6 +49,7 @@ async function googleApi(route) {
     const cal = G.cals[decodeURIComponent(mm[1])];
     if (!cal) return json(route, 404, { error: { message: 'Calendar not found' } });
     const eid = mm[2];
+    if (m === 'GET' && !eid) return json(route, 200, { items: Object.entries(cal.events).map(([id, e]) => ({ id, ...e, updated: e.__upd || new Date().toISOString() })) });
     if (m === 'POST') { const id = nid('ev'); cal.events[id] = JSON.parse(req.postData()); return json(route, 200, { id }); }
     if (!cal.events[eid]) return json(route, 404, { error: { message: 'Event not found' } });
     if (m === 'PUT') { cal.events[eid] = JSON.parse(req.postData()); return json(route, 200, { id: eid }); }
@@ -97,19 +98,19 @@ async function addItem(p, { cat, asset, titlu, exp, suma, rec, paid = 'nu', paid
   await p.selectOption('#formItem select[name=categorie]', cat);
   if (asset) await p.selectOption('#formItem select[name=assetId]', { label: asset });
   if (titlu) await p.fill('#formItem input[name=titlu]', titlu);
+  await p.click(`#stareSeg input[value=${paid === 'nu' ? 'deplatit' : 'platita'}] + span`);
   if (rec) await p.selectOption('#formItem select[name=recurenta]', rec);
   if (suma) await p.fill('#formItem input[name=suma]', String(suma));
-  await p.click(`#paidSeg input[value=${paid}] + span`);
-  if (paidDate) await p.locator('#paidDateWrap input[type=text]').pressSequentially(paidDate);
-  if (exp) { const t = p.locator('#formItem .dfield input[type=text]').first(); await t.fill(''); await t.pressSequentially(exp); }
+  if (paidDate) { await p.click('#btnOtherDate'); const v = p.locator('#valabilDeWrap input[type=text]'); await v.fill(''); await v.pressSequentially(paidDate); }
+  if (exp) { const t = p.locator('#formItem input[name=expira]').locator('xpath=..').locator('input[type=text]'); await t.fill(''); await t.pressSequentially(exp); }
   await p.click('#formItem button[type=submit]');
   await p.waitForTimeout(250);
   if (await p.evaluate(() => document.querySelector('#dlgItem').open)) {
     console.log('DEBUG still open', p.dev, cat, JSON.stringify(await p.evaluate(() => ({
       toast: document.querySelector('#toast').textContent,
       exp: document.querySelector('#formItem input[name=expira]').value,
-      expText: document.querySelector('#formItem .dfield input[type=text]').value,
-      paid: document.querySelector('#formItem input[name=platit]:checked')?.value,
+      expText: document.querySelector('#formItem input[name=expira]').parentNode.querySelector('input[type=text]').value,
+      paid: document.querySelector('#formItem input[name=stare]:checked')?.value,
       cat: document.querySelector('#formItem select[name=categorie]').value,
     }))));
   }
@@ -209,17 +210,16 @@ const findItem = (st, pred) => st.items.find(pred);
   check('4.1 Formular închis cu „Renunță” → nimic salvat', JSON.stringify((await local(pc)).items) === before);
   await pc.click('#fab'); await pc.click('[data-new=item]');
   await pc.fill('#formItem input[name=titlu]', 'Fără dată');
-  await pc.click('#paidSeg input[value=nu] + span');
+  await pc.click('#stareSeg input[value=deplatit] + span');
   await pc.click('#formItem button[type=submit]');
   check('4.2 Fără dată → nu se salvează, formularul rămâne deschis', await pc.evaluate(() => document.querySelector('#dlgItem').open));
-  await pc.locator('#formItem .dfield input[type=text]').first().pressSequentially('31022027');
+  await pc.locator('#formItem input[name=expira]').locator('xpath=..').locator('input[type=text]').pressSequentially('31022027');
   await pc.click('#formItem button[type=submit]');
   check('4.3 Dată imposibilă (31/02) → nu se salvează', await pc.evaluate(() => document.querySelector('#dlgItem').open));
   await pc.keyboard.press('Escape');
   await pc.click('#fab'); await pc.click('[data-new=item]');
-  await pc.locator('#formItem .dfield input[type=text]').first().pressSequentially(dmy(5));
   await pc.click('#formItem button[type=submit]');
-  check('4.4 Fără răspuns la „Ai plătit-o deja?” → nu se salvează', await pc.evaluate(() => document.querySelector('#dlgItem').open));
+  check('4.4 Fără să aleagă „Plătită / De plătit” → nu se salvează', await pc.evaluate(() => document.querySelector('#dlgItem').open));
   await pc.keyboard.press('Escape');
   await pc.reload(); await settle(pc);
   check('4.5 După reîncărcarea paginii datele sunt intacte', JSON.stringify((await local(pc)).items.map((i) => i.id).sort()) === JSON.stringify(JSON.parse(before).map((i) => i.id).sort()));
@@ -329,12 +329,72 @@ const findItem = (st, pred) => st.items.find(pred);
   const nActive = (await local(pc)).items.filter((i) => i.status !== 'platit').length;
   check('7.3 …toate evenimentele, nu doar cel editat', allEvents().length === nActive, `${allEvents().length} evenimente / ${nActive} evidențe active`);
 
+  // ===== 7b. Evenimente orfane (rămase de la versiuni vechi) =====
+  const calId = Object.keys(G.cals)[0];
+  const old = new Date(Date.now() - 3600e3).toISOString();
+  G.cals[calId].events.ghost = { summary: '🚗 RCA – test vechi', __upd: old, extendedProperties: { private: { evidenteId: 'sters-demult' } }, start: { dateTime: iso(2) + 'T09:00:00' } };
+  G.cals[calId].events.fresh = { summary: 'creat acum de alt dispozitiv', extendedProperties: { private: { evidenteId: 'nou' } }, start: { dateTime: iso(3) + 'T09:00:00' } };
+  G.cals[calId].events.manual = { summary: 'eveniment pus de mână', __upd: old, start: { dateTime: iso(4) + 'T09:00:00' } };
+  await pc.reload(); await connect(pc);
+  check('7.4 Eveniment orfan vechi al aplicației → șters automat', !G.cals[calId].events.ghost);
+  check('7.5 Eveniment proaspăt (poate fi de pe alt dispozitiv) → păstrat', !!G.cals[calId].events.fresh);
+  check('7.6 Eveniment pus de mână în calendar → păstrat', !!G.cals[calId].events.manual);
+  check('7.7 Evenimentele evidențelor active → păstrate', (await local(pc)).items.filter((i) => i.status !== 'platit').every((i) => G.cals[calId].events[i.eventId]));
+  delete G.cals[calId].events.fresh; delete G.cals[calId].events.manual;
+
   // ===== 8. Sesiune Google expirată =====
   await pc.evaluate(() => sessionStorage.clear());
   await pc.reload(); await pc.waitForTimeout(500);
   check('8.1 Fără sesiune: aplicația pornește cu datele locale', (await pc.locator('.card').count()) > 0);
   check('8.3 Fără sesiune: banda de reconectare apare', await pc.isVisible('#syncBanner'));
   check('8.2 Fără sesiune: butonul cere reconectare', /Sincronizează|Conectează/.test(await pc.textContent('#syncLabel')));
+
+  // ===== 10. Formular nou: data plății + valabilitate → expirare; evidențe vechi păstrate =====
+  await pc.reload(); await connect(pc);
+  await view(pc, 'tabel');
+  await addItem(pc, { cat: 'CASCO', titlu: 'Groupama', rec: '12', suma: 2100, paid: 'alta', paidDate: '01032026' });
+  await settle(pc);
+  st = await local(pc);
+  let cas = findItem(st, (i) => i.titlu === 'Groupama');
+  check('10.1 Plătită 01/03/2026 + 1 an → expiră 01/03/2027', cas.expira === '2027-03-01', cas.expira);
+  check('10.2 Plata e înregistrată la data plății', cas.istoric.length === 1 && cas.istoric[0].data === '2026-03-01' && cas.valabilDe === '2026-03-01');
+  // evidență „veche” (format de dinainte, fără valabilDe / neplatit)
+  await pc.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('evidente.data.v1'));
+    s.items.push({ id: 'legacy-rca', categorie: 'RCA', titlu: 'ASIGURARE', assetId: null, expira: '2027-03-03', suma: 1400, recurenta: '12', status: 'activ', istoric: [{ data: '2026-11-05', scadenta: null, suma: 1400 }], dirty: true, upd: Date.now() });
+    s.items.push({ id: 'legacy-amenda', categorie: 'Amendă', titlu: 'Parcare', assetId: null, expira: '2026-11-20', suma: 100, recurenta: '0', status: 'activ', istoric: [], dirty: true, upd: Date.now() });
+    s.updatedAt = Date.now();
+    localStorage.setItem('evidente.data.v1', JSON.stringify(s));
+  });
+  await pc.reload(); await connect(pc);
+  await view(pc, 'tabel');
+  await pc.locator('tr', { hasText: 'ASIGURARE' }).click();
+  const vd = await pc.locator('#valabilDeWrap input[type=text]').inputValue();
+  check('10.3 Evidență veche: data plății dedusă = expirare − 1 an', vd === '03/03/2026', vd);
+  check('10.4 Evidență veche: deschisă ca „Plătită”', await pc.isChecked('#stareSeg input[value=platita]'));
+  await pc.click('#formItem button[type=submit]');
+  await settle(pc);
+  let leg = findItem(await local(pc), (i) => i.id === 'legacy-rca');
+  check('10.5 Salvare fără modificări → expirarea rămâne 03/03/2027', leg.expira === '2027-03-03', leg.expira);
+  check('10.6 …istoricul plăților nu se dublează', leg.istoric.length === 1, `${leg.istoric.length} plăți`);
+  await pc.locator('tr', { hasText: 'ASIGURARE' }).click();
+  const vdi = pc.locator('#valabilDeWrap input[type=text]');
+  await vdi.fill(''); await vdi.pressSequentially('10032026');
+  const dbg = await pc.evaluate(() => ({ exp: document.querySelector('#formItem input[name=expira]').value, vd: document.querySelector('#formItem input[name=valabilDe]').value, vdt: document.querySelector('#valabilDeWrap input[type=text]').value, hint: document.querySelector('#calcHint').textContent, focus: document.activeElement && (document.activeElement.name || document.activeElement.id || document.activeElement.tagName) }));
+  check('10.7 Schimb data plății → expirarea se recalculează (10/03/2027)', dbg.exp === '2027-03-10', JSON.stringify(dbg));
+  await pc.click('#formItem button[type=submit]');
+  await settle(pc);
+  leg = findItem(await local(pc), (i) => i.id === 'legacy-rca');
+  check('10.8 …salvat + plata corectată, nu adăugată', leg.expira === '2027-03-10' && leg.istoric.length === 1 && leg.istoric[0].data === '2026-03-10');
+  check('10.9 …evenimentul din calendar s-a mutat', allEvents().some((e) => e.summary.includes('ASIGURARE') && e.start.dateTime.startsWith('2027-03-10')));
+  await pc.locator('tr', { hasText: 'Parcare' }).click();
+  check('10.10 Amendă veche neplătită → deschisă ca „De plătit”', await pc.isChecked('#stareSeg input[value=deplatit]'));
+  await pc.click('#stareSeg input[value=platita] + span');
+  await pc.selectOption('#formItem select[name=recurenta]', '0');
+  await pc.click('#formItem button[type=submit]');
+  await settle(pc);
+  const am = findItem(await local(pc), (i) => i.id === 'legacy-amenda');
+  check('10.11 Amendă trecută pe „Plătită, o singură dată” → închisă, fără eveniment', am.status === 'platit' && !allEvents().some((e) => e.summary.includes('Parcare')) && am.istoric.length === 1);
 
   const errs = [...pc.errs.map((e) => 'PC: ' + e), ...tel.errs.map((e) => 'Tel: ' + e)];
   check('9.1 Nicio eroare JavaScript în pagină', errs.length === 0, errs.join(' | '));
