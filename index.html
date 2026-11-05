@@ -45,7 +45,7 @@
       <button class="stat danger" data-quick="expired" type="button"><span class="num" id="stExpired">0</span><span class="lbl">Expirate / restante</span></button>
       <button class="stat warn" data-quick="7" type="button"><span class="num" id="st7">0</span><span class="lbl">În 7 zile</span></button>
       <button class="stat info" data-quick="30" type="button"><span class="num" id="st30">0</span><span class="lbl">În 30 de zile</span></button>
-      <div class="stat money"><span class="num" id="stSum">0 lei</span><span class="lbl">De plătit în 30 de zile</span></div>
+      <div class="stat money"><span class="num" id="stSum">0 lei</span><span class="lbl" id="stSumLbl">Plătit anul acesta</span></div>
     </section>
 
     <nav class="views" role="tablist" aria-label="Mod de afișare">
@@ -93,7 +93,7 @@
         <label>Scadență / expiră la
           <input name="expira" type="date" required>
         </label>
-        <label>Sumă (lei)
+        <label>Ultima sumă plătită (lei)
           <input name="suma" type="number" step="0.01" min="0" inputmode="decimal" placeholder="opțional">
         </label>
         <div id="amendaHelp" class="hint full" hidden>

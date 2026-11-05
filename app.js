@@ -211,7 +211,13 @@
     $('#stExpired').textContent = active.filter((i) => dl(i) < 0).length;
     $('#st7').textContent = active.filter((i) => dl(i) >= 0 && dl(i) <= 7).length;
     $('#st30').textContent = active.filter((i) => dl(i) >= 0 && dl(i) <= 30).length;
-    $('#stSum').textContent = lei(active.filter((i) => dl(i) <= 30).reduce((s, i) => s + (Number(i.suma) || 0), 0));
+    // Total plătit efectiv (din istoricul plăților confirmate cu ✓), nu estimat.
+    const year = todayIso().slice(0, 4);
+    const month = todayIso().slice(0, 7);
+    const pays = state.items.flatMap((i) => i.istoric || []).filter((h) => h.data && h.suma != null);
+    const sumOf = (pref) => pays.filter((h) => h.data.startsWith(pref)).reduce((s, h) => s + (Number(h.suma) || 0), 0);
+    $('#stSum').textContent = lei(sumOf(year));
+    $('#stSumLbl').textContent = `Plătit în ${year} · luna asta ${lei(sumOf(month))}`;
     document.querySelectorAll('.stat[data-quick]').forEach((b) => b.classList.toggle('active', b.dataset.quick === ui.quick));
     document.querySelectorAll('.views button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === prefs.view)));
 
@@ -277,7 +283,7 @@
         <div class="sub">${subLine(it)}</div>
         <div class="meta"><span class="badge ${st.cls}">${st.text}</span><span class="date">${roDate(it.expira)}</span>${syncFlag(it)}</div>
       </div>
-      <div class="side">${it.suma ? `<span class="sum">${lei(Number(it.suma))}</span>` : ''}${paidBtn(it)}</div>
+      <div class="side">${it.suma ? `<span class="sum" title="Ultima sumă plătită"><small>ultima</small> ${lei(Number(it.suma))}</span>` : ''}${paidBtn(it)}</div>
     </article>`;
   }
 
@@ -334,7 +340,7 @@
     const pct = Math.max(4, Math.min(100, 100 - (d / 365) * 100));
     return `<button type="button" class="wrow ${st.cls}" data-open="${i.id}">
       <span class="wi">${catOf(i.categorie).ico}</span>
-      <span class="wl"><b>${esc(titleOf(i))}</b><small>${roDate(i.expira)}${i.suma ? ' · ' + lei(Number(i.suma)) : ''}</small></span>
+      <span class="wl"><b>${esc(titleOf(i))}</b><small>${roDate(i.expira)}${i.suma ? ' · ultima ' + lei(Number(i.suma)) : ''}</small></span>
       <span class="badge ${st.cls}">${st.text}</span>
     </button><div class="wbar ${st.cls}" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
   }
@@ -349,8 +355,7 @@
     });
     const today = todayIso();
     return `<div class="timeline">${[...byMonth.entries()].map(([k, its]) => {
-      const total = its.filter((i) => i.status !== 'platit').reduce((s, i) => s + (Number(i.suma) || 0), 0);
-      return `<div class="tmonth">${monthFmt.format(parseIso(k + '-01'))}<small>${its.length} ${its.length === 1 ? 'scadență' : 'scadențe'}${total ? ' · ' + lei(total) : ''}</small></div>
+      return `<div class="tmonth">${monthFmt.format(parseIso(k + '-01'))}<small>${its.length} ${its.length === 1 ? 'scadență' : 'scadențe'}</small></div>
         ${its.map((i) => {
           const st = statusOf(i);
           const d = parseIso(i.expira);
@@ -359,7 +364,7 @@
             <div class="tline"></div>
             <div class="tbody">
               <div><div class="t">${catOf(i.categorie).ico} ${esc(titleOf(i))}</div><div class="sub">${subLine(i)} <span class="badge ${st.cls}">${st.text}</span>${syncFlag(i)}</div></div>
-              <div class="side">${i.suma ? `<span class="sum">${lei(Number(i.suma))}</span>` : ''}${paidBtn(i)}</div>
+              <div class="side">${i.suma ? `<span class="sum" title="Ultima sumă plătită"><small>ultima</small> ${lei(Number(i.suma))}</span>` : ''}${paidBtn(i)}</div>
             </div></div>`;
         }).join('')}`;
     }).join('')}</div>`;
@@ -368,7 +373,7 @@
   // 4) Tabel – dens, sortat după scadență
   function renderTable(rows) {
     return `<div class="table-wrap"><table class="grid-t">
-      <thead><tr><th></th><th>Evidență</th><th class="hide-sm">Bun</th><th>Scadență</th><th class="hide-sm">Stare</th><th class="num">Sumă</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Evidență</th><th class="hide-sm">Bun</th><th>Scadență</th><th class="hide-sm">Stare</th><th class="num">Ultima plată</th><th></th></tr></thead>
       <tbody>${rows.map((i) => {
         const st = statusOf(i);
         const a = assetOf(i);
@@ -905,7 +910,7 @@
   }
   function eventDesc(i) {
     return [
-      i.suma ? `Sumă: ${lei(Number(i.suma))}` : '',
+      i.suma ? `Ultima plată: ${lei(Number(i.suma))}` : '',
       REC_LABEL[i.recurenta] ? `Se repetă ${REC_LABEL[i.recurenta]}` : '',
       i.note || '',
       `Deschide aplicația: ${location.origin}${location.pathname}`,
