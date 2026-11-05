@@ -2,6 +2,9 @@
 
 Aplicație web instalabilă pe telefon (PWA) pentru evidența rovinietelor, asigurărilor (RCA, CASCO, locuință), ITP-urilor, facturilor, impozitelor și amenzilor.
 
+- **Bunuri**: adaugi mașini (număr, an, VIN) și locuințe. Fiecare are o fișă cu documentele ei (RCA, ITP, rovinietă, CASCO / PAD, impozit) și arată ce lipsește.
+- **4 moduri de afișare**: Prioritar (grupat pe urgență), Bunuri (carduri tip portofel), Cronologie (pe luni), Tabel (compact).
+- **Aspect**: 8 culori de accent și mod luminos / întunecat / automat (din ⚙️).
 - Carduri colorate după termen: **roșu** = expirat / azi, **portocaliu** = ≤ 7 zile, **albastru** = ≤ 30 zile, **verde** = mai târziu.
 - **✓ Plătit**: la elementele recurente (RCA anual, factură lunară etc.) mută automat scadența la următoarea perioadă. La cele unice (amenzi) le marchează plătite. Ai „Anulează” 7 secunde.
 - **Google Calendar**: fiecare scadență devine un eveniment la ora 09:00 într-un calendar separat, **„Evidențe plăți”**. Notificările pop-up vin cu 14, 7 și 1 zi înainte, iar emailul cu 7 zile înainte. Se modifică în `config.js`.

@@ -11,6 +11,13 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <script>
+    // Aplică tema înainte de randare, ca să nu clipească.
+    try {
+      var p = JSON.parse(localStorage.getItem('evidente.ui') || '{}');
+      if (p.mode && p.mode !== 'auto') document.documentElement.setAttribute('data-mode', p.mode);
+    } catch (e) {}
+  </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -23,14 +30,14 @@
       <button id="btnSync" class="btn ghost small" type="button" title="Sincronizare Google">
         <span class="dot" id="syncDot"></span><span id="syncLabel">Conectează Google</span>
       </button>
-      <button id="btnSettings" class="icon-btn" type="button" aria-label="Setări">
+      <button id="btnSettings" class="icon-btn" type="button" aria-label="Setări și aspect">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.58-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66a.49.49 0 0 0-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.49.42h4c.25 0 .45-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1.01c.22.08.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.66z"/></svg>
       </button>
     </div>
   </header>
 
   <div id="demoBanner" class="banner" hidden>
-    <strong>Mod demo.</strong> Datele stau doar în acest browser și nu se sincronizează cu calendarul. Completează Client ID-ul Google în <code>config.js</code> (vezi README).
+    <strong>Mod demo.</strong> Datele stau doar în acest browser și nu se sincronizează cu calendarul.
   </div>
 
   <main>
@@ -41,47 +48,58 @@
       <div class="stat money"><span class="num" id="stSum">0 lei</span><span class="lbl">De plătit în 30 de zile</span></div>
     </section>
 
-    <section class="filters">
-      <input id="search" type="search" placeholder="Caută (ex. Dacia, Enel, RCA)…" autocomplete="off">
+    <nav class="views" role="tablist" aria-label="Mod de afișare">
+      <button type="button" role="tab" data-view="prioritar">Prioritar</button>
+      <button type="button" role="tab" data-view="bunuri">Bunuri</button>
+      <button type="button" role="tab" data-view="cronologie">Cronologie</button>
+      <button type="button" role="tab" data-view="tabel">Tabel</button>
+    </nav>
+
+    <section class="filters" id="filters">
+      <input id="search" type="search" placeholder="Caută (ex. Duster, AR-12, Enel, RCA)…" autocomplete="off">
       <div class="chips" id="chips"></div>
-      <label class="toggle"><input type="checkbox" id="showPaid"> Arată și cele plătite</label>
+      <label class="toggle" id="paidToggle"><input type="checkbox" id="showPaid"> Arată și cele plătite</label>
     </section>
 
-    <section id="list" class="list" aria-live="polite"></section>
-    <p id="empty" class="empty" hidden>Nimic de afișat. Apasă <strong>+</strong> ca să adaugi prima evidență.</p>
+    <section id="view" aria-live="polite"></section>
+    <p id="empty" class="empty" hidden></p>
   </main>
 
-  <button id="fab" class="fab" type="button" aria-label="Adaugă">+</button>
+  <button id="fab" class="fab" type="button" aria-label="Adaugă" aria-haspopup="menu">+</button>
+  <div id="fabMenu" class="fab-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-new="item">🧾 Evidență nouă <small>RCA, ITP, factură, amendă…</small></button>
+    <button type="button" role="menuitem" data-new="masina">🚗 Mașină nouă</button>
+    <button type="button" role="menuitem" data-new="locuinta">🏠 Locuință nouă</button>
+  </div>
 
-  <!-- Formular adăugare / editare -->
+  <!-- Formular evidență -->
   <dialog id="dlgItem" class="sheet">
     <form id="formItem" method="dialog" novalidate>
       <header class="sheet-head">
-        <h2 id="dlgTitle">Adaugă evidență</h2>
+        <h2 id="dlgTitle">Evidență nouă</h2>
         <button type="button" class="icon-btn" data-close aria-label="Închide">✕</button>
       </header>
       <input type="hidden" name="id">
       <div class="grid">
-        <label class="full">Categorie
+        <label>Categorie
           <select name="categorie" required></select>
         </label>
-        <label class="full">Titlu
-          <input name="titlu" required placeholder="ex. RCA Allianz, Factură Enel, Amendă viteză">
+        <label>Bun asociat
+          <select name="assetId"></select>
         </label>
-        <label>Pentru (mașină / locuință)
-          <input name="obiect" list="obiecte" placeholder="ex. Dacia AR-12-ABC">
-          <datalist id="obiecte"></datalist>
+        <label class="full">Titlu <span class="opt">(opțional)</span>
+          <input name="titlu" placeholder="ex. Allianz, Enel curent, amendă viteză">
         </label>
         <label>Scadență / expiră la
           <input name="expira" type="date" required>
+        </label>
+        <label>Sumă (lei)
+          <input name="suma" type="number" step="0.01" min="0" inputmode="decimal" placeholder="opțional">
         </label>
         <div id="amendaHelp" class="hint full" hidden>
           Plata în 15 zile de la comunicarea procesului-verbal se face cu jumătate din minimul amenzii (OG 2/2001, art. 28).
           <span class="inline">Comunicat la <input type="date" id="dataComunicare"> <button type="button" class="btn small" id="btnCalc15">+15 zile</button></span>
         </div>
-        <label>Sumă (lei)
-          <input name="suma" type="number" step="0.01" min="0" inputmode="decimal" placeholder="opțional">
-        </label>
         <label>Se repetă
           <select name="recurenta">
             <option value="0">Nu</option>
@@ -100,19 +118,73 @@
         <button type="button" class="btn danger ghost" id="btnDelete" hidden>Șterge</button>
         <span class="spacer"></span>
         <button type="button" class="btn ghost" data-close>Renunță</button>
-        <button type="submit" class="btn primary" value="save">Salvează</button>
+        <button type="submit" class="btn primary">Salvează</button>
       </footer>
     </form>
   </dialog>
 
-  <!-- Setări -->
+  <!-- Formular bun (mașină / locuință) -->
+  <dialog id="dlgAsset" class="sheet">
+    <form id="formAsset" method="dialog" novalidate>
+      <header class="sheet-head">
+        <h2 id="dlgAssetTitle">Mașină nouă</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Închide">✕</button>
+      </header>
+      <input type="hidden" name="id">
+      <div class="seg full" id="tipSeg" role="radiogroup" aria-label="Tip">
+        <label><input type="radio" name="tip" value="masina" checked><span>🚗 Mașină</span></label>
+        <label><input type="radio" name="tip" value="locuinta"><span>🏠 Locuință</span></label>
+        <label><input type="radio" name="tip" value="alt"><span>📦 Altceva</span></label>
+      </div>
+      <div class="grid">
+        <label class="full">Nume
+          <input name="nume" required placeholder="ex. Dacia Duster / Casa Pecica">
+        </label>
+        <label data-for="masina">Număr înmatriculare
+          <input name="numar" placeholder="AR 12 ABC" autocapitalize="characters">
+        </label>
+        <label data-for="masina">An fabricație
+          <input name="an" type="number" min="1950" max="2100" inputmode="numeric" placeholder="opțional">
+        </label>
+        <label class="full" data-for="masina">Serie șasiu (VIN)
+          <input name="vin" placeholder="opțional" autocapitalize="characters">
+        </label>
+        <label class="full" data-for="locuinta">Adresă
+          <input name="adresa" placeholder="opțional">
+        </label>
+        <label class="full">Note
+          <textarea name="note" rows="2" placeholder="opțional"></textarea>
+        </label>
+      </div>
+      <footer class="sheet-foot">
+        <button type="button" class="btn danger ghost" id="btnDeleteAsset" hidden>Șterge</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Renunță</button>
+        <button type="submit" class="btn primary">Salvează</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Setări și aspect -->
   <dialog id="dlgSettings" class="sheet">
     <div class="sheet-body">
       <header class="sheet-head">
-        <h2>Setări</h2>
+        <h2>Setări și aspect</h2>
         <button type="button" class="icon-btn" data-close aria-label="Închide">✕</button>
       </header>
-      <p class="muted" id="accountInfo">Neconectat.</p>
+
+      <h3>Mod</h3>
+      <div class="seg" id="modeSeg">
+        <label><input type="radio" name="mode" value="auto"><span>Automat</span></label>
+        <label><input type="radio" name="mode" value="light"><span>☀️ Luminos</span></label>
+        <label><input type="radio" name="mode" value="dark"><span>🌙 Întunecat</span></label>
+      </div>
+
+      <h3>Culoare</h3>
+      <div class="swatches" id="swatches"></div>
+
+      <h3>Date și sincronizare</h3>
+      <p class="muted small" id="accountInfo">Neconectat.</p>
       <div class="stack">
         <button class="btn" id="btnResync" type="button">Resincronizează tot calendarul</button>
         <button class="btn" id="btnIcs" type="button">Exportă .ics (pentru alt calendar)</button>
@@ -120,7 +192,7 @@
         <label class="btn file">Importă backup (.json)<input type="file" id="fileImport" accept="application/json" hidden></label>
         <button class="btn danger ghost" id="btnSignOut" type="button">Deconectează contul Google</button>
       </div>
-      <p class="muted small">Notificări: pop-up cu <span id="remInfo"></span> înainte, la ora <span id="hourInfo"></span>. Se modifică în <code>config.js</code>.</p>
+      <p class="muted small">Notificări: pop-up cu <span id="remInfo"></span> înainte, la ora <span id="hourInfo"></span>.</p>
     </div>
   </dialog>
 
