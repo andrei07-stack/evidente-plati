@@ -483,6 +483,7 @@
     $('#paidBlock').hidden = !!it; // la editare, plățile se confirmă cu „✓ Plătit”
     $('#paidDateWrap').hidden = true;
     $('#paidHint').textContent = '';
+    manualExp = false;
     const d = it || Object.assign({ categorie: 'RCA', recurenta: 12 }, preset);
     if (!it && preset.categorie) d.recurenta = catOf(preset.categorie).rec;
     fillAssetSelect(d.assetId);
@@ -502,21 +503,38 @@
     const c = catOf(form.categorie.value);
     if (!form.id.value) form.recurenta.value = String(c.rec);
     $('#amendaHelp').hidden = c.id !== 'Amendă';
+    updatePaidBlock();
   });
   $('#btnCalc15').addEventListener('click', () => {
     const v = $('#dataComunicare').value;
     if (v) form.expira.value = addDays(v, 15);
   });
 
-  $('#paidSeg').addEventListener('change', () => {
+  // La adăugare: dacă e deja plătită și are perioadă, expirarea = data plății + perioada (dacă n-ai scris-o tu de mână).
+  let manualExp = false;
+  form.expira.addEventListener('change', () => { manualExp = true; updatePaidBlock(); });
+  function updatePaidBlock() {
+    if (form.id.value) return;
     const v = form.querySelector('input[name=platit]:checked')?.value;
     $('#paidDateWrap').hidden = v !== 'alta';
-    $('#paidHint').textContent = {
-      azi: 'Plata intră în totalul „Plătit”. La „Scadență / expiră la” pune până când e valabilă.',
-      alta: 'Plata intră în totalul „Plătit” la data aleasă. La „Scadență / expiră la” pune până când e valabilă.',
-      nu: 'La „Scadență / expiră la” pune termenul până la care trebuie plătită.',
-    }[v] || '';
-  });
+    const rec = form.recurenta.value;
+    const base = v === 'azi' ? todayIso() : v === 'alta' ? $('#dataPlata').value : '';
+    let hint = '';
+    if (v === 'nu') hint = 'La „Scadență / expiră la” pune termenul până la care trebuie plătită.';
+    else if (v && rec === '0') hint = 'Plata intră în totalul „Plătit”. Alege la „Valabilitate” pe ce perioadă ai plătit, ca să calculez expirarea.';
+    else if (v && !base) hint = 'Alege data plății.';
+    else if (v) {
+      const calc = addPeriod(base, rec);
+      if (!manualExp) form.expira.value = calc;
+      hint = form.expira.value === calc
+        ? `Expiră automat la ${roDate(calc)} (data plății + ${PER_LABEL[rec]}). Poți corecta data mai sus.`
+        : `Ai pus expirarea de mână (${roDate(form.expira.value)}). Calculat ar fi ${roDate(calc)}.`;
+    }
+    $('#paidHint').textContent = hint;
+  }
+  $('#paidSeg').addEventListener('change', updatePaidBlock);
+  $('#dataPlata').addEventListener('change', updatePaidBlock);
+  form.recurenta.addEventListener('change', updatePaidBlock);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
