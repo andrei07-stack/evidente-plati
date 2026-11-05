@@ -128,7 +128,9 @@ const findItem = (st, pred) => st.items.find(pred);
   const tel = await device(browser, 'Telefon', { ...devices['Pixel 7'], locale: 'en-US' });
 
   // ===== 1. Conectare și calendar unic =====
+  check('1.0 Înainte de conectare: banda „Nu ești conectat” e vizibilă', await pc.isVisible('#syncBanner'));
   await connect(pc);
+  check('1.05 După conectare: banda dispare', await pc.isHidden('#syncBanner'));
   check('1.1 PC: prima conectare creează un singur calendar', Object.keys(G.cals).length === 1, `${Object.keys(G.cals).length} calendare`);
   check('1.2 PC: fișierul de date apare în Drive', Object.keys(G.files).length === 1);
   await connect(tel);
@@ -331,6 +333,7 @@ const findItem = (st, pred) => st.items.find(pred);
   await pc.evaluate(() => sessionStorage.clear());
   await pc.reload(); await pc.waitForTimeout(500);
   check('8.1 Fără sesiune: aplicația pornește cu datele locale', (await pc.locator('.card').count()) > 0);
+  check('8.3 Fără sesiune: banda de reconectare apare', await pc.isVisible('#syncBanner'));
   check('8.2 Fără sesiune: butonul cere reconectare', /Sincronizează|Conectează/.test(await pc.textContent('#syncLabel')));
 
   const errs = [...pc.errs.map((e) => 'PC: ' + e), ...tel.errs.map((e) => 'Tel: ' + e)];

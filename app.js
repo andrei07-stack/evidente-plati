@@ -102,6 +102,7 @@
     state.items.forEach((i) => { if (i.dirty) i.upd = state.updatedAt; });
     saveLocal();
     render();
+    if (!token && !DEMO) setSync('off', localStorage.getItem(LS_CONNECTED) ? 'Sincronizează' : 'Conectează Google');
     scheduleSync();
   }
 
@@ -858,6 +859,14 @@
   function setSync(mode, label) {
     $('#syncDot').className = 'dot' + ({ on: ' on', busy: ' busy', err: ' err' }[mode] || '');
     $('#syncLabel').textContent = label || ({ on: 'Sincronizat', busy: 'Se sincronizează…', err: 'Eroare sincronizare', off: 'Conectează Google' }[mode]);
+    const b = $('#syncBanner');
+    b.hidden = DEMO || !!token;
+    if (!b.hidden) {
+      const n = state ? state.items.filter((i) => i.dirty).length : 0;
+      $('#syncBannerText').textContent = n
+        ? `Ai ${n} ${n === 1 ? 'modificare netrimisă' : 'modificări netrimise'}. Apasă aici ca să le trimiți și să iei datele de pe celelalte dispozitive.`
+        : 'Apasă aici ca să iei datele de pe celelalte dispozitive și să trimiți modificările tale.';
+    }
   }
 
   function loadGis() {
@@ -1089,6 +1098,7 @@
     }
   }
 
+  $('#syncBanner').addEventListener('click', () => $('#btnSync').click());
   $('#btnSync').addEventListener('click', async () => {
     if (DEMO) { toast('Mod demo: completează GOOGLE_CLIENT_ID în config.js.'); return; }
     try {
