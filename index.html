@@ -100,15 +100,8 @@
           Plata în 15 zile de la comunicarea procesului-verbal se face cu jumătate din minimul amenzii (OG 2/2001, art. 28).
           <span class="inline">Comunicat la <input type="date" id="dataComunicare"> <button type="button" class="btn small" id="btnCalc15">+15 zile</button></span>
         </div>
-        <label>Se repetă
-          <select name="recurenta">
-            <option value="0">Nu</option>
-            <option value="1">Lunar</option>
-            <option value="3">Trimestrial</option>
-            <option value="6">La 6 luni</option>
-            <option value="12">Anual</option>
-            <option value="24">La 2 ani</option>
-          </select>
+        <label>Valabilitate / se repetă
+          <select name="recurenta"></select>
         </label>
         <label class="full">Note
           <textarea name="note" rows="2" placeholder="nr. poliță, cod client, link plată…"></textarea>
@@ -119,6 +112,35 @@
         <span class="spacer"></span>
         <button type="button" class="btn ghost" data-close>Renunță</button>
         <button type="submit" class="btn primary">Salvează</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Plată: pe ce perioadă -->
+  <dialog id="dlgPay" class="sheet">
+    <form id="formPay" method="dialog" novalidate>
+      <header class="sheet-head">
+        <h2 id="payTitle">Plătit</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Închide">✕</button>
+      </header>
+      <h3>Pe ce perioadă ai plătit?</h3>
+      <div class="seg wrap" id="payPeriods" role="radiogroup"></div>
+      <div class="grid">
+        <label data-rec>Valabil de la
+          <input name="start" type="date">
+        </label>
+        <label data-rec>Expiră la
+          <input name="next" type="date">
+        </label>
+        <label class="full">Sumă plătită (lei)
+          <input name="suma" type="number" step="0.01" min="0" inputmode="decimal" placeholder="opțional">
+        </label>
+      </div>
+      <p class="muted small" id="payHint"></p>
+      <footer class="sheet-foot">
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Renunță</button>
+        <button type="submit" class="btn primary">✓ Confirmă plata</button>
       </footer>
     </form>
   </dialog>

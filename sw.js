@@ -1,5 +1,5 @@
 // Service worker: aplicația se deschide și offline (cu ultima copie locală a datelor).
-const CACHE = 'evidente-v3';
+const CACHE = 'evidente-v4';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {

@@ -32,7 +32,27 @@
     { id: 'Altele', ico: '📌', rec: 0 },
   ];
   const catOf = (id) => CATEGORII.find((c) => c.id === id) || CATEGORII[CATEGORII.length - 1];
-  const REC_LABEL = { 0: '', 1: 'lunar', 3: 'trimestrial', 6: 'la 6 luni', 12: 'anual', 24: 'la 2 ani' };
+  // Perioade de valabilitate: număr = luni, „Nd” = zile (ex. rovinietă 7 / 30 / 90 de zile).
+  const PERIOADE = [
+    ['0', 'Nu se repetă'], ['1d', '1 zi'], ['7d', '7 zile'], ['30d', '30 de zile'], ['90d', '90 de zile'],
+    ['1', '1 lună'], ['3', '3 luni'], ['6', '6 luni'], ['12', '1 an'], ['24', '2 ani'],
+  ];
+  const PER_LABEL = Object.fromEntries(PERIOADE);
+  const recLabel = (code) => (code && String(code) !== '0' && PER_LABEL[String(code)] ? 'la ' + PER_LABEL[String(code)] : '');
+  const REC_LABEL = new Proxy({}, { get: (_, k) => recLabel(k) });
+  // Ce perioade se propun la „Plătit”, în funcție de categorie.
+  const PER_CAT = {
+    'Rovinietă': ['1d', '7d', '30d', '90d', '12'],
+    'Factură': ['1', '3', '6', '12'],
+    'Abonament': ['1', '3', '6', '12'],
+    'ITP': ['6', '12', '24'],
+  };
+  const perFor = (cat) => PER_CAT[cat] || ['1', '3', '6', '12', '24'];
+  function addPeriod(iso, code) {
+    const c = String(code);
+    return c.endsWith('d') ? addDays(iso, parseInt(c, 10)) : addMonths(iso, Number(c));
+  }
+  const isRecurring = (it) => String(it.recurenta || '0') !== '0';
 
   // Ce documente are în mod normal fiecare tip de bun (apar ca „lipsă” în fișa bunului).
   const TIPURI = {
@@ -64,7 +84,7 @@
 
   function loadJson(store, key) { try { return JSON.parse(store.getItem(key)); } catch (e) { return null; } }
   function emptyState() {
-    return { version: 2, updatedAt: 0, assets: [], items: [], settings: { calendarId: null }, pendingDeletes: [] };
+    return { version: 2, updatedAt: 0, assets: [], items: [], settings: { calendarId: null }, pendingDeletes: [], deleted: [] };
   }
   function loadLocal() {
     const s = loadJson(localStorage, LS_DATA);
@@ -78,6 +98,8 @@
   }
   function commit() {
     state.updatedAt = Date.now();
+    // marcaj de timp pe elementele modificate, pentru îmbinarea între dispozitive
+    state.items.forEach((i) => { if (i.dirty) i.upd = state.updatedAt; });
     saveLocal();
     render();
     scheduleSync();
@@ -88,6 +110,7 @@
   function migrate(s) {
     s.assets = Array.isArray(s.assets) ? s.assets : [];
     s.pendingDeletes = s.pendingDeletes || [];
+    s.deleted = s.deleted || [];
     s.settings = s.settings || { calendarId: null };
     const carCats = new Set(['RCA', 'CASCO', 'ITP', 'Rovinietă', 'Revizie', 'Amendă']);
     s.items.forEach((i) => {
@@ -376,6 +399,7 @@
   const dlg = $('#dlgItem');
   const form = $('#formItem');
   form.categorie.innerHTML = CATEGORII.map((c) => `<option value="${esc(c.id)}">${c.ico} ${esc(c.id)}</option>`).join('');
+  form.recurenta.innerHTML = PERIOADE.map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('');
 
   function fillAssetSelect(selected) {
     const groups = Object.entries(TIPURI).map(([tip, t]) => {
@@ -398,7 +422,7 @@
     form.titlu.value = d.titlu || '';
     form.expira.value = d.expira || '';
     form.suma.value = d.suma ?? '';
-    form.recurenta.value = String(d.recurenta ?? 0);
+    form.recurenta.value = PER_LABEL[String(d.recurenta ?? 0)] ? String(d.recurenta ?? 0) : '0';
     form.note.value = d.note || '';
     $('#amendaHelp').hidden = form.categorie.value !== 'Amendă';
     dlg.showModal();
@@ -426,7 +450,7 @@
       assetId: form.assetId.value || null,
       expira: form.expira.value,
       suma: form.suma.value === '' ? null : Number(form.suma.value),
-      recurenta: Number(form.recurenta.value),
+      recurenta: form.recurenta.value,
       note: form.note.value.trim(),
       dirty: true,
     });
@@ -442,29 +466,72 @@
     removeItem(it);
     dlg.close();
     commit();
-    toast('Șters.', { label: 'Anulează', fn: () => { state.items.push(Object.assign(it, { dirty: true })); state.pendingDeletes = state.pendingDeletes.filter((e) => e !== it.eventId); commit(); } });
+    toast('Șters.', { label: 'Anulează', fn: () => { state.items.push(Object.assign(it, { dirty: true })); state.deleted = state.deleted.filter((x) => x !== it.id); state.pendingDeletes = state.pendingDeletes.filter((e) => e !== it.eventId); commit(); } });
   });
 
   function removeItem(it) {
     state.items = state.items.filter((i) => i.id !== it.id);
+    state.deleted.push(it.id);
     if (it.eventId) state.pendingDeletes.push(it.eventId);
   }
 
-  function markPaid(it) {
+  // ---------- Plată: pe ce perioadă? ----------
+  const dlgPay = $('#dlgPay');
+  const formPay = $('#formPay');
+  let payItem = null;
+  function openPay(it) {
+    payItem = it;
+    const cur = isRecurring(it) ? String(it.recurenta) : perFor(it.categorie).includes(String(catOf(it.categorie).rec)) ? String(catOf(it.categorie).rec) : '0';
+    const opts = [...new Set([...perFor(it.categorie), ...(isRecurring(it) ? [String(it.recurenta)] : [])])];
+    $('#payTitle').textContent = `Plătit: ${titleOf(it)}`;
+    $('#payPeriods').innerHTML = [...opts.map((c) => [c, PER_LABEL[c]]), ['0', 'O singură dată']]
+      .map(([c, l]) => `<label><input type="radio" name="per" value="${c}" ${c === cur ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('');
+    if (!formPay.querySelector('input[name=per]:checked')) formPay.querySelector('input[name=per][value="0"]').checked = true;
+    formPay.start.value = daysLeft(it.expira) >= 0 ? it.expira : todayIso();
+    formPay.suma.value = it.suma ?? '';
+    updatePay();
+    dlgPay.showModal();
+  }
+  function updatePay() {
+    const per = formPay.querySelector('input[name=per]:checked').value;
+    const once = per === '0';
+    formPay.querySelectorAll('[data-rec]').forEach((el) => { el.hidden = once; });
+    if (!once && formPay.start.value) formPay.next.value = addPeriod(formPay.start.value, per);
+    $('#payHint').textContent = once
+      ? 'Se marchează ca plătită și dispare din calendar.'
+      : `Următoarea scadență: ${formPay.next.value ? roDate(formPay.next.value) : '—'}. Evenimentul din calendar se mută automat.`;
+  }
+  $('#payPeriods').addEventListener('change', updatePay);
+  formPay.start.addEventListener('change', updatePay);
+  formPay.next.addEventListener('change', () => {
+    $('#payHint').textContent = `Următoarea scadență: ${formPay.next.value ? roDate(formPay.next.value) : '—'}.`;
+  });
+  formPay.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const it = payItem;
+    if (!it) return;
+    const per = formPay.querySelector('input[name=per]:checked').value;
+    if (per !== '0' && !formPay.next.value) { formPay.next.focus(); return toast('Alege data următoarei scadențe.'); }
     const snapshot = JSON.parse(JSON.stringify(it));
+    const paid = formPay.suma.value === '' ? null : Number(formPay.suma.value);
     it.istoric = it.istoric || [];
-    it.istoric.push({ data: todayIso(), scadenta: it.expira, suma: it.suma });
+    it.istoric.push({ data: todayIso(), scadenta: it.expira, suma: paid, perioada: per });
     it.ultimaPlata = todayIso();
-    if (it.recurenta > 0) {
-      it.expira = addMonths(it.expira, it.recurenta);
-      toast(`Următoarea scadență: ${roDate(it.expira)}`, { label: 'Anulează', fn: () => restore(snapshot) });
-    } else {
+    if (paid !== null) it.suma = paid;
+    if (per === '0') {
       it.status = 'platit';
       toast('Marcat ca plătit.', { label: 'Anulează', fn: () => restore(snapshot) });
+    } else {
+      it.recurenta = per;
+      it.expira = formPay.next.value;
+      it.status = 'activ';
+      toast(`Valabil până la ${roDate(it.expira)}`, { label: 'Anulează', fn: () => restore(snapshot) });
     }
     it.dirty = true;
+    dlgPay.close();
     commit();
-  }
+  });
+
   function restore(snap) {
     const i = state.items.findIndex((x) => x.id === snap.id);
     if (i >= 0) state.items[i] = Object.assign(snap, { dirty: true, eventId: state.items[i].eventId });
@@ -513,6 +580,7 @@
       vin: tip === 'masina' ? formA.vin.value.trim().toUpperCase() : '',
       adresa: tip === 'locuinta' ? formA.adresa.value.trim() : '',
       note: formA.note.value.trim(),
+      upd: Date.now(),
     });
     if (!prev) state.assets.push(a);
     // titlurile evenimentelor din calendar conțin numele bunului
@@ -530,6 +598,7 @@
     if (!confirm(`Ștergi „${a.nume}”${its.length ? ` și cele ${its.length} evidențe legate` : ''}?`)) return;
     its.forEach(removeItem);
     state.assets = state.assets.filter((x) => x.id !== a.id);
+    state.deleted.push(a.id);
     dlgA.close();
     commit();
     toast('Șters.');
@@ -561,7 +630,7 @@
       e.stopPropagation();
       const it = state.items.find((i) => i.id === act.dataset.id);
       if (!it) return;
-      if (act.dataset.act === 'paid') markPaid(it);
+      if (act.dataset.act === 'paid') openPay(it);
       if (act.dataset.act === 'reopen') { it.status = 'activ'; it.dirty = true; commit(); }
       return;
     }
@@ -783,16 +852,14 @@
   }
 
   async function ensureCalendar() {
-    const id = state.settings.calendarId;
-    if (id) {
-      try { await api(`${CAL}/calendars/${encodeURIComponent(id)}`); return id; } catch (e) { if (e.status !== 404 && e.status !== 403) throw e; }
-      state.items.forEach((i) => { i.eventId = null; i.dirty = true; });
-    }
+    if (state.settings.calendarId) return state.settings.calendarId;
     const cal = await api(`${CAL}/calendars`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ summary: CFG.CALENDAR_NAME, timeZone: CFG.TIME_ZONE, description: 'Creat de aplicația Evidențe plăți' }),
     });
     state.settings.calendarId = cal.id;
+    state.items.forEach((i) => { i.eventId = null; i.dirty = true; });
+    saveLocal(); // salvează imediat ID-ul, ca să nu se creeze un al doilea calendar
     return cal.id;
   }
 
@@ -826,7 +893,11 @@
     if (i.eventId) {
       try { await api(`${base}/${i.eventId}`, { method: 'PUT', headers, body }); return; } catch (e) { if (![404, 410].includes(e.status)) throw e; }
     }
-    const ev = await api(base, { method: 'POST', headers, body });
+    let ev;
+    try { ev = await api(base, { method: 'POST', headers, body }); } catch (e) {
+      if (e.status === 404) e.calendarGone = true; // calendarul a fost șters manual din Google Calendar
+      throw e;
+    }
     i.eventId = ev.id;
   }
 
@@ -837,27 +908,58 @@
     pendingSave = setTimeout(syncNow, 800);
   }
 
+  // Îmbină datele locale cu cele din Drive (ex. telefon + PC): pe fiecare element câștigă modificarea mai nouă.
+  function mergeStates(local, remote) {
+    const deleted = [...new Set([...(local.deleted || []), ...(remote.deleted || [])])];
+    const gone = new Set(deleted);
+    const mergeArr = (a, b) => {
+      const m = new Map();
+      [...b, ...a].forEach((x) => { const cur = m.get(x.id); if (!cur || (x.upd || 0) >= (cur.upd || 0)) m.set(x.id, x); });
+      return [...m.values()].filter((x) => !gone.has(x.id));
+    };
+    const out = Object.assign(emptyState(), {
+      updatedAt: Math.max(local.updatedAt || 0, remote.updatedAt || 0),
+      assets: mergeArr(local.assets, remote.assets),
+      items: mergeArr(local.items, remote.items),
+      deleted,
+      pendingDeletes: [...new Set([...(local.pendingDeletes || []), ...(remote.pendingDeletes || [])])],
+      settings: Object.assign({}, local.settings),
+    });
+    const rc = remote.settings?.calendarId;
+    if (rc && rc !== out.settings.calendarId) {
+      // un alt dispozitiv a creat deja calendarul: îl folosim pe acela
+      if (out.settings.calendarId) out.items.forEach((i) => { i.eventId = null; i.dirty = true; });
+      out.settings.calendarId = rc;
+    }
+    return out;
+  }
+
   async function syncNow({ pull = false } = {}) {
     if (DEMO || syncing) return;
     if (!token) { setSync('off'); return; }
     syncing = true;
     setSync('busy');
     try {
-      if (pull) {
-        const remote = await driveRead();
-        if (remote && Array.isArray(remote.items) && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-          state = migrate(Object.assign(emptyState(), remote));
-          saveLocal();
-          render();
-        }
+      const remote = await driveRead();
+      if (remote && Array.isArray(remote.items)) {
+        state = mergeStates(state, migrate(Object.assign(emptyState(), remote)));
+        saveLocal();
+        render();
       }
-      const calId = await ensureCalendar();
+      let calId = await ensureCalendar();
       for (const ev of [...state.pendingDeletes]) {
         try { await api(`${CAL}/calendars/${encodeURIComponent(calId)}/events/${ev}`, { method: 'DELETE' }); } catch (e) { if (![404, 410].includes(e.status)) throw e; }
         state.pendingDeletes = state.pendingDeletes.filter((x) => x !== ev);
       }
       for (const i of state.items.filter((x) => x.dirty)) {
-        await syncItemEvent(calId, i);
+        try {
+          await syncItemEvent(calId, i);
+        } catch (e) {
+          if (!e.calendarGone) throw e;
+          state.settings.calendarId = null;
+          calId = await ensureCalendar();
+          await syncItemEvent(calId, i);
+        }
         i.dirty = false;
       }
       saveLocal();
@@ -879,7 +981,7 @@
     if (DEMO) { toast('Mod demo: completează GOOGLE_CLIENT_ID în config.js.'); return; }
     try {
       await ensureToken(true);
-      await syncNow({ pull: true });
+      await syncNow();
     } catch (e) {
       setSync('err', 'Conectează Google');
       toast(`Conectare eșuată: ${e.message}`);
@@ -894,7 +996,7 @@
     setSync('off', 'Mod demo');
   } else {
     restoreToken();
-    if (token) syncNow({ pull: true });
+    if (token) syncNow();
     else setSync('off', localStorage.getItem(LS_CONNECTED) ? 'Sincronizează' : 'Conectează Google');
   }
   if (!state.assets.length && !state.items.length) prefs.view = 'bunuri';
