@@ -327,7 +327,7 @@
     const sub = a.tip === 'masina' ? [a.an, a.vin ? 'VIN …' + a.vin.slice(-6) : ''].filter(Boolean).join(' · ') : a.adresa || '';
     return `<section class="wcard">
       <div class="whead" data-edit-asset="${a.id}" title="Editează">
-        <span class="wname">${esc(a.nume)}</span><span class="wico">${t.ico}</span>
+        <span class="wname">${esc(a.nume)} <span class="wedit">✏️ Editează</span></span><span class="wico">${t.ico}</span>
         <span class="wsub">${plateHtml(a.numar)} ${esc(sub)}</span>
         <span class="wstate">${state_}</span>
       </div>
@@ -496,7 +496,8 @@
     form.note.value = d.note || '';
     $('#amendaHelp').hidden = form.categorie.value !== 'Amendă';
     dlg.showModal();
-    if (!it) setTimeout(() => (preset.categorie ? form.expira : form.categorie).focus(), 50);
+    // focus inițial doar dacă utilizatorul n-a început deja să completeze alt câmp
+    if (!it) setTimeout(() => { const ae = document.activeElement; if (!ae || ae === dlg || !dlg.contains(ae)) (preset.categorie ? form.expira : form.categorie).focus(); }, 50);
   }
 
   form.categorie.addEventListener('change', () => {
@@ -615,7 +616,7 @@
   });
   formPay.addEventListener('submit', (e) => {
     e.preventDefault();
-    const it = payItem;
+    const it = payItem && state.items.find((x) => x.id === payItem.id); // starea poate fi reîmprospătată din Drive între timp
     if (!it) return;
     const per = formPay.querySelector('input[name=per]:checked').value;
     if (per !== '0' && !formPay.next.value) { formPay.next.focus(); return toast('Alege data următoarei scadențe.'); }
@@ -670,7 +671,7 @@
     if (a) $('#dlgAssetTitle').textContent = 'Editează';
     syncAssetFields();
     dlgA.showModal();
-    if (!a) setTimeout(() => formA.nume.focus(), 50);
+    if (!a) setTimeout(() => { const ae = document.activeElement; if (!ae || ae === dlgA || !dlgA.contains(ae)) formA.nume.focus(); }, 50);
   }
 
   formA.addEventListener('submit', (e) => {
@@ -1041,8 +1042,10 @@
     return out;
   }
 
-  async function syncNow({ pull = false } = {}) {
-    if (DEMO || syncing) return;
+  let syncAgain = false;
+  async function syncNow() {
+    if (DEMO) return;
+    if (syncing) { syncAgain = true; return; } // o modificare făcută în timpul sincronizării se trimite imediat după
     if (!token) { setSync('off'); return; }
     syncing = true;
     setSync('busy');
@@ -1065,6 +1068,7 @@
           if (!e.calendarGone) throw e;
           state.settings.calendarId = null;
           calId = await ensureCalendar();
+          syncAgain = true; // restul evenimentelor se refac în calendarul nou imediat după
           await syncItemEvent(calId, i);
         }
         i.dirty = false;
@@ -1081,6 +1085,7 @@
       toast(`Sincronizare eșuată: ${e.message}`);
     } finally {
       syncing = false;
+      if (syncAgain && token) { syncAgain = false; setTimeout(syncNow, 50); } else syncAgain = false;
     }
   }
 
@@ -1109,7 +1114,9 @@
   if (!state.assets.length && !state.items.length) prefs.view = 'bunuri';
   saveLocal();
   render();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+  // Când revii în aplicație (sau la 5 minute), ia modificările făcute pe celălalt dispozitiv.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); if (token) syncNow(); } });
+  setInterval(() => { if (token && !document.hidden) syncNow(); }, 5 * 60 * 1000);
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
