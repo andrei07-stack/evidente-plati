@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Evidențe plăți</title>
+  <meta name="description" content="Evidența rovinietelor, asigurărilor, ITP-urilor, facturilor și amenzilor, cu notificări în Google Calendar.">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="28" height="28">
+      <h1>Evidențe plăți</h1>
+    </div>
+    <div class="top-actions">
+      <button id="btnSync" class="btn ghost small" type="button" title="Sincronizare Google">
+        <span class="dot" id="syncDot"></span><span id="syncLabel">Conectează Google</span>
+      </button>
+      <button id="btnSettings" class="icon-btn" type="button" aria-label="Setări">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.58-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66a.49.49 0 0 0-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.49.42h4c.25 0 .45-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1.01c.22.08.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.66z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="demoBanner" class="banner" hidden>
+    <strong>Mod demo.</strong> Datele stau doar în acest browser și nu se sincronizează cu calendarul. Completează Client ID-ul Google în <code>config.js</code> (vezi README).
+  </div>
+
+  <main>
+    <section class="stats" aria-label="Rezumat">
+      <button class="stat danger" data-quick="expired" type="button"><span class="num" id="stExpired">0</span><span class="lbl">Expirate / restante</span></button>
+      <button class="stat warn" data-quick="7" type="button"><span class="num" id="st7">0</span><span class="lbl">În 7 zile</span></button>
+      <button class="stat info" data-quick="30" type="button"><span class="num" id="st30">0</span><span class="lbl">În 30 de zile</span></button>
+      <div class="stat money"><span class="num" id="stSum">0 lei</span><span class="lbl">De plătit în 30 de zile</span></div>
+    </section>
+
+    <section class="filters">
+      <input id="search" type="search" placeholder="Caută (ex. Dacia, Enel, RCA)…" autocomplete="off">
+      <div class="chips" id="chips"></div>
+      <label class="toggle"><input type="checkbox" id="showPaid"> Arată și cele plătite</label>
+    </section>
+
+    <section id="list" class="list" aria-live="polite"></section>
+    <p id="empty" class="empty" hidden>Nimic de afișat. Apasă <strong>+</strong> ca să adaugi prima evidență.</p>
+  </main>
+
+  <button id="fab" class="fab" type="button" aria-label="Adaugă">+</button>
+
+  <!-- Formular adăugare / editare -->
+  <dialog id="dlgItem" class="sheet">
+    <form id="formItem" method="dialog" novalidate>
+      <header class="sheet-head">
+        <h2 id="dlgTitle">Adaugă evidență</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Închide">✕</button>
+      </header>
+      <input type="hidden" name="id">
+      <div class="grid">
+        <label class="full">Categorie
+          <select name="categorie" required></select>
+        </label>
+        <label class="full">Titlu
+          <input name="titlu" required placeholder="ex. RCA Allianz, Factură Enel, Amendă viteză">
+        </label>
+        <label>Pentru (mașină / locuință)
+          <input name="obiect" list="obiecte" placeholder="ex. Dacia AR-12-ABC">
+          <datalist id="obiecte"></datalist>
+        </label>
+        <label>Scadență / expiră la
+          <input name="expira" type="date" required>
+        </label>
+        <div id="amendaHelp" class="hint full" hidden>
+          Plata în 15 zile de la comunicarea procesului-verbal se face cu jumătate din minimul amenzii (OG 2/2001, art. 28).
+          <span class="inline">Comunicat la <input type="date" id="dataComunicare"> <button type="button" class="btn small" id="btnCalc15">+15 zile</button></span>
+        </div>
+        <label>Sumă (lei)
+          <input name="suma" type="number" step="0.01" min="0" inputmode="decimal" placeholder="opțional">
+        </label>
+        <label>Se repetă
+          <select name="recurenta">
+            <option value="0">Nu</option>
+            <option value="1">Lunar</option>
+            <option value="3">Trimestrial</option>
+            <option value="6">La 6 luni</option>
+            <option value="12">Anual</option>
+            <option value="24">La 2 ani</option>
+          </select>
+        </label>
+        <label class="full">Note
+          <textarea name="note" rows="2" placeholder="nr. poliță, cod client, link plată…"></textarea>
+        </label>
+      </div>
+      <footer class="sheet-foot">
+        <button type="button" class="btn danger ghost" id="btnDelete" hidden>Șterge</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Renunță</button>
+        <button type="submit" class="btn primary" value="save">Salvează</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Setări -->
+  <dialog id="dlgSettings" class="sheet">
+    <div class="sheet-body">
+      <header class="sheet-head">
+        <h2>Setări</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Închide">✕</button>
+      </header>
+      <p class="muted" id="accountInfo">Neconectat.</p>
+      <div class="stack">
+        <button class="btn" id="btnResync" type="button">Resincronizează tot calendarul</button>
+        <button class="btn" id="btnIcs" type="button">Exportă .ics (pentru alt calendar)</button>
+        <button class="btn" id="btnExport" type="button">Descarcă backup (.json)</button>
+        <label class="btn file">Importă backup (.json)<input type="file" id="fileImport" accept="application/json" hidden></label>
+        <button class="btn danger ghost" id="btnSignOut" type="button">Deconectează contul Google</button>
+      </div>
+      <p class="muted small">Notificări: pop-up cu <span id="remInfo"></span> înainte, la ora <span id="hourInfo"></span>. Se modifică în <code>config.js</code>.</p>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
