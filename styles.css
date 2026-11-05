@@ -372,3 +372,17 @@ dialog::backdrop { background: rgba(10, 15, 20, .45); }
   box-shadow: 0 6px 18px rgba(0, 0, 0, .25); font-size: 14px;
 }
 .toast button { background: transparent; border: 0; color: #7fe3d8; font-weight: 700; cursor: pointer; }
+
+/* ---------- Câmp de dată zz/ll/aaaa ---------- */
+.dfield { position: relative; display: flex; align-items: stretch; width: 100%; }
+.dfield input[type=text] { flex: 1; min-width: 0; padding-right: 44px !important; font-variant-numeric: tabular-nums; }
+.dfield input.bad { outline: 2px solid var(--danger); outline-offset: -1px; }
+.dfield .dbtn {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 36px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer;
+  display: grid; place-items: center;
+}
+.dfield .dbtn:hover { background: var(--primary-soft); color: var(--primary); }
+.dfield .dnative { position: absolute; left: 0; bottom: 0; width: 100%; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+.hint .dfield { width: 150px; }
+.hint .dfield input[type=text] { padding: 5px 40px 5px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }

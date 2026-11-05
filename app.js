@@ -137,7 +137,7 @@
   const isoOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const parseIso = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
   const todayIso = () => isoOf(new Date());
-  const roDate = (s) => { const [y, m, d] = s.split('-'); return `${d}.${m}.${y}`; };
+  const roDate = (s) => { const [y, m, d] = s.split("-"); return `${d}/${m}/${y}`; };
   const daysLeft = (s) => Math.round((parseIso(s) - parseIso(todayIso())) / 86400000);
   function addMonths(s, n) {
     const d = parseIso(s);
@@ -394,6 +394,67 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.hidden = true; }, action ? 7000 : 3500);
   }
+
+  // ---------- Câmp de dată zz/ll/aaaa ----------
+  // Câmpul nativ <input type=date> afișează formatul după limba browserului (ex. lună/zi/an).
+  // Îl ascundem și punem în față un câmp text cu format românesc + buton care deschide calendarul nativ.
+  // Valoarea rămâne pe câmpul nativ (ISO aaaa-ll-zz), deci restul codului nu se schimbă.
+  function enhanceDate(native) {
+    const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    const wrap = document.createElement('span');
+    wrap.className = 'dfield';
+    const text = document.createElement('input');
+    text.type = 'text';
+    text.inputMode = 'numeric';
+    text.placeholder = 'zz/ll/aaaa';
+    text.autocomplete = 'off';
+    text.maxLength = 10;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'dbtn';
+    btn.setAttribute('aria-label', 'Alege din calendar');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm-2 8h14v10H5V10z"/></svg>';
+    native.parentNode.insertBefore(wrap, native);
+    wrap.append(text, btn, native);
+    native.classList.add('dnative');
+    native.tabIndex = -1;
+
+    const toText = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
+    const show = () => { text.value = toText(proto.get.call(native)); text.classList.remove('bad'); };
+    Object.defineProperty(native, 'value', {
+      get() { return proto.get.call(native); },
+      set(v) { proto.set.call(native, v); show(); },
+    });
+    native.focus = () => text.focus();
+
+    text.addEventListener('input', () => {
+      // inserează automat „/” după zi și lună
+      let v = text.value.replace(/[.\-\s]/g, '/').replace(/[^\d/]/g, '');
+      if (/^\d{3}$/.test(v)) v = v.slice(0, 2) + '/' + v.slice(2);
+      if (/^\d{1,2}\/\d{3}$/.test(v)) v = v.replace(/^(\d{1,2}\/\d{2})(\d)$/, '$1/$2');
+      if (/^\d{4,8}$/.test(v)) v = v.replace(/^(\d{2})(\d{2})(\d{0,4})$/, (m, a, b, c) => [a, b, c].filter(Boolean).join('/'));
+      text.value = v;
+      const m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const iso = `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+        const d = parseIso(iso);
+        const ok = d.getDate() === Number(m[1]) && d.getMonth() + 1 === Number(m[2]);
+        text.classList.toggle('bad', !ok);
+        if (ok && iso !== proto.get.call(native)) { proto.set.call(native, iso); native.dispatchEvent(new Event('change', { bubbles: true })); }
+      } else if (!v && proto.get.call(native)) {
+        proto.set.call(native, '');
+        native.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    text.addEventListener('blur', () => { if (text.value && !/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text.value)) text.classList.add('bad'); else if (!text.classList.contains('bad')) show(); });
+    native.addEventListener('change', show);
+    native.form?.addEventListener('reset', () => setTimeout(show));
+    btn.addEventListener('click', () => {
+      try { native.showPicker(); } catch (e) { native.click(); }
+    });
+    show();
+  }
+  document.querySelectorAll('input[type=date]').forEach(enhanceDate);
 
   // ---------- Formular evidență ----------
   const dlg = $('#dlgItem');
