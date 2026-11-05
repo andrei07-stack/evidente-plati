@@ -388,3 +388,8 @@ dialog::backdrop { background: rgba(10, 15, 20, .45); }
 .hint .dfield input[type=text] { padding: 5px 40px 5px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
 
 .sum small { font-weight: 500; color: var(--muted); font-size: 11px; margin-right: 3px; }
+
+.paid-block { margin-top: 4px; }
+.paid-block h3 { margin-top: 14px; }
+.paid-block .req { color: var(--danger); }
+.paid-block .grid { margin-bottom: 8px; }

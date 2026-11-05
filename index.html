@@ -107,6 +107,20 @@
           <textarea name="note" rows="2" placeholder="nr. poliță, cod client, link plată…"></textarea>
         </label>
       </div>
+      <div id="paidBlock" class="paid-block">
+        <h3>Ai plătit-o deja? <span class="req">*</span></h3>
+        <div class="seg" id="paidSeg" role="radiogroup">
+          <label><input type="radio" name="platit" value="azi"><span>✓ Da, azi</span></label>
+          <label><input type="radio" name="platit" value="alta"><span>Da, altă dată</span></label>
+          <label><input type="radio" name="platit" value="nu"><span>Nu încă</span></label>
+        </div>
+        <div class="grid" id="paidDateWrap" hidden>
+          <label>Data plății
+            <input type="date" id="dataPlata">
+          </label>
+        </div>
+        <p class="muted small" id="paidHint"></p>
+      </div>
       <footer class="sheet-foot">
         <button type="button" class="btn danger ghost" id="btnDelete" hidden>Șterge</button>
         <span class="spacer"></span>

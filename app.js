@@ -480,6 +480,9 @@
     form.reset();
     $('#dlgTitle').textContent = it ? 'Editează evidența' : 'Evidență nouă';
     $('#btnDelete').hidden = !it;
+    $('#paidBlock').hidden = !!it; // la editare, plățile se confirmă cu „✓ Plătit”
+    $('#paidDateWrap').hidden = true;
+    $('#paidHint').textContent = '';
     const d = it || Object.assign({ categorie: 'RCA', recurenta: 12 }, preset);
     if (!it && preset.categorie) d.recurenta = catOf(preset.categorie).rec;
     fillAssetSelect(d.assetId);
@@ -505,11 +508,24 @@
     if (v) form.expira.value = addDays(v, 15);
   });
 
+  $('#paidSeg').addEventListener('change', () => {
+    const v = form.querySelector('input[name=platit]:checked')?.value;
+    $('#paidDateWrap').hidden = v !== 'alta';
+    $('#paidHint').textContent = {
+      azi: 'Plata intră în totalul „Plătit”. La „Scadență / expiră la” pune până când e valabilă.',
+      alta: 'Plata intră în totalul „Plătit” la data aleasă. La „Scadență / expiră la” pune până când e valabilă.',
+      nu: 'La „Scadență / expiră la” pune termenul până la care trebuie plătită.',
+    }[v] || '';
+  });
+
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!form.expira.value) { form.expira.focus(); return toast('Alege data scadenței.'); }
     const id = form.id.value;
     const prev = id ? state.items.find((i) => i.id === id) : null;
+    const platit = prev ? null : form.querySelector('input[name=platit]:checked')?.value;
+    if (!prev && !platit) { $('#paidSeg').scrollIntoView({ block: 'center' }); return toast('Alege dacă ai plătit-o deja.'); }
+    if (platit === 'alta' && !$('#dataPlata').value) { $('#dataPlata').focus(); return toast('Alege data plății.'); }
     const it = Object.assign(prev || { id: uid(), status: 'activ', istoric: [], eventId: null }, {
       categorie: form.categorie.value,
       titlu: form.titlu.value.trim(),
@@ -520,7 +536,14 @@
       note: form.note.value.trim(),
       dirty: true,
     });
-    if (!prev) state.items.push(it);
+    if (!prev) {
+      if (platit === 'azi' || platit === 'alta') {
+        const data = platit === 'azi' ? todayIso() : $('#dataPlata').value;
+        it.istoric.push({ data, scadenta: null, suma: it.suma, perioada: it.recurenta });
+        it.ultimaPlata = data;
+      }
+      state.items.push(it);
+    }
     dlg.close();
     commit();
     toast(prev ? 'Salvat.' : 'Adăugat.');
