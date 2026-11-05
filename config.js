@@ -2,7 +2,7 @@
 // Pune aici Client ID-ul OAuth creat în Google Cloud Console (vezi README.md).
 // Cât timp e gol, aplicația rulează în MOD DEMO: datele stau doar în browser, fără calendar.
 window.APP_CONFIG = {
-  GOOGLE_CLIENT_ID: '',
+  GOOGLE_CLIENT_ID: '724740677973-jmp9kngqptf24una7fp5qkhaea2qsp47.apps.googleusercontent.com',
 
   // Numele calendarului dedicat, creat automat la prima conectare.
   CALENDAR_NAME: 'Evidențe plăți',
